@@ -129,6 +129,13 @@ func writeSigningBase(writer io.Writer, request *http.Request) error {
 
     // URL
     scheme := strings.ToLower(request.URL.Scheme)
+    if scheme == "" {
+        scheme = "http"
+        if request.TLS != nil {
+            scheme = "https"
+        }
+    }
+
     if _, err := writer.Write(encode(scheme, false)); err != nil {
         return err
     }
@@ -138,6 +145,10 @@ func writeSigningBase(writer io.Writer, request *http.Request) error {
     }
 
     host := strings.ToLower(request.URL.Host)
+    if host == "" {
+        host = strings.ToLower(request.Host)
+    }
+
     switch {
     case scheme == "http" && strings.HasSuffix(host, ":80"):
         host = host[:len(host)-len(":80")]
