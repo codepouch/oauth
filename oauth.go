@@ -11,10 +11,29 @@ import (
     "net/url"
     "sort"
     "strings"
+    "strconv"
+    "time"
+)
+
+const (
+    SUPPORTED_VERSION          = "1.0"
+    SUPPORTED_SIGNATURE_METHOD = "HMAC-SHA1"
+
+    CONSUMER_KEY     = "oauth_consumer_key"
+    VERSION          = "oauth_version"
+    SIGNATURE_METHOD = "oauth_signature_method"
+    NONCE            = "oauth_nonce"
+    TIMESTAMP        = "oauth_timestamp"
+    SIGNATURE        = "oauth_signature"
+    TOKEN            = "oauth_token"
 )
 
 var (
-    ErrInvalidSignature = errors.New("oauth: invalid signature")
+    ErrInvalidParameters          = errors.New("oauth: invalid parameters")
+    ErrUnsupportedVersion         = errors.New("oauth: unsupported version")
+    ErrUnsupportedSignatureMethod = errors.New("oauth: unsupported signature method")
+    ErrInvalidSignature           = errors.New("oauth: invalid signature")
+    ErrInvalidTimestamp           = errors.New("oauth: invalid timestamp")
 )
 
 type Token struct {
@@ -34,17 +53,55 @@ func Parse(request *http.Request) error {
         extractAuthorizationHeader(header, request.Form)
     }
 
+    if request.Form.Get(VERSION) != SUPPORTED_VERSION {
+        return ErrUnsupportedVersion
+    }
+
+    if request.Form.Get(SIGNATURE_METHOD) != SUPPORTED_SIGNATURE_METHOD {
+        return ErrUnsupportedSignatureMethod
+    }
+
+    if request.Form.Get(CONSUMER_KEY) == "" {
+        return ErrInvalidParameters
+    }
+
+    if request.Form.Get(NONCE) == "" {
+        return ErrInvalidParameters
+    }
+
+    if request.Form.Get(TIMESTAMP) == "" {
+        return ErrInvalidParameters
+    }
+
+    if request.Form.Get(SIGNATURE) == "" {
+        return ErrInvalidParameters
+    }
+
     return nil
 }
 
-func Validate(request *http.Request, consumer, token *Token) error {
+func ValidateSignature(request *http.Request, consumer, token *Token) error {
     signature, err := Sign(request, consumer, token)
     if err != nil {
         return err
     }
 
-    if signature != request.Form.Get("oauth_signature") {
+    if signature != request.Form.Get(SIGNATURE) {
         return ErrInvalidSignature
+    }
+
+    return nil
+}
+
+func ValidateTimestamp(request *http.Request, tolerance int64) error {
+    timestamp, err := strconv.ParseInt(request.Form.Get(TIMESTAMP), 10, 64)
+    if err != nil {
+        return err
+    }
+
+    deviation := int64(time.Now().Unix()) - timestamp
+    if deviation > tolerance || deviation < -tolerance {
+        return ErrInvalidTimestamp
     }
 
     return nil
@@ -174,7 +231,7 @@ func writeSigningBase(writer io.Writer, request *http.Request) error {
 
     capacity := 0
     for key, values := range request.Form {
-        if key == "oauth_signature" {
+        if key == SIGNATURE {
             continue
         }
         capacity += len(values)
@@ -182,7 +239,7 @@ func writeSigningBase(writer io.Writer, request *http.Request) error {
 
     form := make(pairs, 0, capacity)
     for key, values := range request.Form {
-        if key == "oauth_signature" {
+        if key == SIGNATURE {
             continue
         }
 
@@ -239,4 +296,3 @@ func buildSigningKey(consumer, token *Token) ([]byte, error) {
 
     return key.Bytes(), nil
 }
-

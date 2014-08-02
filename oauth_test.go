@@ -167,10 +167,9 @@ func TestOAuth(t *testing.T) {
             t.Fatal(err)
         }
 
-        if err := Validate(testcase.request, testcase.consumer, testcase.token); err != nil {
+        if err := ValidateSignature(testcase.request, testcase.consumer, testcase.token); err != nil {
             t.Fatal(err)
         }
     }
 
 }
-
