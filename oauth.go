@@ -18,7 +18,11 @@ var (
 )
 
 type Token struct {
-    Key, Secret string
+    key, secret string
+}
+
+func NewToken(key, secret string) *Token {
+    return &Token{key, secret}
 }
 
 func Parse(request *http.Request) error {
@@ -206,7 +210,7 @@ func writeSigningBase(writer io.Writer, request *http.Request) error {
 
 func buildSigningKey(consumer, token *Token) ([]byte, error) {
     var key bytes.Buffer
-    if _, err := key.Write(encode(consumer.Secret, false)); err != nil {
+    if _, err := key.Write(encode(consumer.secret, false)); err != nil {
         return nil, err
     }
 
@@ -218,7 +222,7 @@ func buildSigningKey(consumer, token *Token) ([]byte, error) {
         return key.Bytes(), nil
     }
 
-    if _, err := key.Write(encode(token.Secret, false)); err != nil {
+    if _, err := key.Write(encode(token.secret, false)); err != nil {
         return nil, err
     }
 
