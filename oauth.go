@@ -7,12 +7,9 @@ import (
     "encoding/base64"
     "errors"
     "io"
-    "net/http"
     "net/url"
     "sort"
     "strings"
-    "strconv"
-    "time"
 )
 
 const (
@@ -44,111 +41,19 @@ func NewToken(key, secret string) *Token {
     return &Token{key, secret}
 }
 
-func Parse(request *http.Request) error {
-    if err := request.ParseForm(); err != nil {
-        return err
-    }
-
-    for _, header := range request.Header["Authorization"] {
-        extractAuthorizationHeader(header, request.Form)
-    }
-
-    if request.Form.Get(VERSION) != SUPPORTED_VERSION {
-        return ErrUnsupportedVersion
-    }
-
-    if request.Form.Get(SIGNATURE_METHOD) != SUPPORTED_SIGNATURE_METHOD {
-        return ErrUnsupportedSignatureMethod
-    }
-
-    if request.Form.Get(CONSUMER_KEY) == "" {
-        return ErrInvalidParameters
-    }
-
-    if request.Form.Get(NONCE) == "" {
-        return ErrInvalidParameters
-    }
-
-    if request.Form.Get(TIMESTAMP) == "" {
-        return ErrInvalidParameters
-    }
-
-    if request.Form.Get(SIGNATURE) == "" {
-        return ErrInvalidParameters
-    }
-
-    return nil
-}
-
-func ValidateSignature(request *http.Request, consumer, token *Token) error {
-    signature, err := Sign(request, consumer, token)
-    if err != nil {
-        return err
-    }
-
-    if signature != request.Form.Get(SIGNATURE) {
-        return ErrInvalidSignature
-    }
-
-    return nil
-}
-
-func ValidateTimestamp(request *http.Request, tolerance int64) error {
-    timestamp, err := strconv.ParseInt(request.Form.Get(TIMESTAMP), 10, 64)
-    if err != nil {
-        return err
-    }
-
-    deviation := int64(time.Now().Unix()) - timestamp
-    if deviation > tolerance || deviation < -tolerance {
-        return ErrInvalidTimestamp
-    }
-
-    return nil
-}
-
-func Sign(request *http.Request, consumer, token *Token) (string, error) {
+func Sign(method string, url *url.URL, values url.Values, consumer, token *Token) (string, error) {
     key, err := buildSigningKey(consumer, token)
     if err != nil {
         return "", err
     }
 
     hasher := hmac.New(sha1.New, key)
-    if err := writeSigningBase(hasher, request); err != nil {
+    if err := writeSigningBase(hasher, method, url, values); err != nil {
         return "", err
     }
 
     sum := hasher.Sum(nil)
     return base64.StdEncoding.EncodeToString(sum), nil
-}
-
-// Authorization: OAuth realm="http://sp.example.com/",
-// oauth_consumer_key="0685bd9184jfhq22",
-// oauth_token="ad180jjd733klru7",
-// oauth_signature_method="HMAC-SHA1",
-// oauth_signature="wOJIO9A2W5mFwDgiDvZbTSMK%2FPY%3D",
-// oauth_timestamp="137131200",
-// oauth_nonce="4572616e48616d6d65724c61686176",
-// oauth_version="1.0"
-func extractAuthorizationHeader(header string, parameters url.Values) error {
-    if !strings.HasPrefix(header, "OAuth ") {
-        return nil
-    }
-
-    for _, part := range strings.Split(strings.TrimPrefix(header, "OAuth "), ",") {
-        parts := strings.SplitN(strings.TrimSpace(part), "=", 2)
-        name, value := parts[0], parts[1]
-        if name == "realm" {
-            continue
-        }
-
-        value, err := url.QueryUnescape(strings.Trim(value, "\""))
-        if err != nil {
-            return err
-        }
-        parameters.Add(name, value)
-    }
-    return nil
 }
 
 type pair struct {
@@ -173,10 +78,10 @@ func (p pairs) Swap(i, j int) {
     p[i], p[j] = p[j], p[i]
 }
 
-func writeSigningBase(writer io.Writer, request *http.Request) error {
+func writeSigningBase(writer io.Writer, method string, url *url.URL, values url.Values) error {
 
     // Method
-    if _, err := writer.Write(encode(strings.ToUpper(request.Method), false)); err != nil {
+    if _, err := writer.Write(encode(strings.ToUpper(method), false)); err != nil {
         return err
     }
 
@@ -185,14 +90,7 @@ func writeSigningBase(writer io.Writer, request *http.Request) error {
     }
 
     // URL
-    scheme := strings.ToLower(request.URL.Scheme)
-    if scheme == "" {
-        scheme = "http"
-        if request.TLS != nil {
-            scheme = "https"
-        }
-    }
-
+    scheme := strings.ToLower(url.Scheme)
     if _, err := writer.Write(encode(scheme, false)); err != nil {
         return err
     }
@@ -201,11 +99,7 @@ func writeSigningBase(writer io.Writer, request *http.Request) error {
         return err
     }
 
-    host := strings.ToLower(request.URL.Host)
-    if host == "" {
-        host = strings.ToLower(request.Host)
-    }
-
+    host := strings.ToLower(url.Host)
     switch {
     case scheme == "http" && strings.HasSuffix(host, ":80"):
         host = host[:len(host)-len(":80")]
@@ -217,7 +111,7 @@ func writeSigningBase(writer io.Writer, request *http.Request) error {
         return err
     }
 
-    if _, err := writer.Write(encode(request.URL.Path, false)); err != nil {
+    if _, err := writer.Write(encode(url.Path, false)); err != nil {
         return err
     }
 
@@ -230,7 +124,7 @@ func writeSigningBase(writer io.Writer, request *http.Request) error {
     // does not change the sort order.
 
     capacity := 0
-    for key, values := range request.Form {
+    for key, values := range values {
         if key == SIGNATURE {
             continue
         }
@@ -238,7 +132,7 @@ func writeSigningBase(writer io.Writer, request *http.Request) error {
     }
 
     form := make(pairs, 0, capacity)
-    for key, values := range request.Form {
+    for key, values := range values {
         if key == SIGNATURE {
             continue
         }

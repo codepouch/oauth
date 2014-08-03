@@ -163,11 +163,23 @@ var testcases = []struct {
 func TestOAuth(t *testing.T) {
     for _, testcase := range testcases {
 
-        if err := Parse(testcase.request); err != nil {
+        if err := ParseRequest(testcase.request); err != nil {
             t.Fatal(err)
         }
 
         if err := ValidateSignature(testcase.request, testcase.consumer, testcase.token); err != nil {
+            t.Fatal(err)
+        }
+
+        if err := SignRequest(testcase.request, testcase.consumer, testcase.token, "nonce"); err != nil {
+            t.Fatal(err)
+        }
+
+        if err := ValidateSignature(testcase.request, testcase.consumer, testcase.token); err != nil {
+            t.Fatal(err)
+        }
+
+        if err := ValidateTimestamp(testcase.request, 60); err != nil {
             t.Fatal(err)
         }
     }
