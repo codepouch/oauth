@@ -1,11 +1,11 @@
 package oauth
 
 import (
+    "bytes"
     "net/http"
     "net/url"
-    "time"
     "strconv"
-    "bytes"
+    "time"
 )
 
 //
@@ -32,11 +32,11 @@ func SignRequest(request *http.Request, consumer, token *Token, nonce string) er
 
     // prepare oauth parameters
     oauth := url.Values{
-        VERSION: {SUPPORTED_VERSION},
+        VERSION:          {SUPPORTED_VERSION},
         SIGNATURE_METHOD: {SUPPORTED_SIGNATURE_METHOD},
-        NONCE: {nonce},
-        TIMESTAMP: {strconv.FormatInt(time.Now().Unix(), 10)},
-        CONSUMER_KEY: {consumer.key},
+        NONCE:            {nonce},
+        TIMESTAMP:        {strconv.FormatInt(time.Now().Unix(), 10)},
+        CONSUMER_KEY:     {consumer.key},
     }
 
     if token != nil {

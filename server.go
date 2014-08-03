@@ -4,8 +4,8 @@ import (
     "net/http"
     "net/url"
     "strconv"
-    "time"
     "strings"
+    "time"
 )
 
 // Parse a request on the server, gets all the oauth parameters into request.Form

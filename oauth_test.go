@@ -183,5 +183,4 @@ func TestOAuth(t *testing.T) {
             t.Fatal(err)
         }
     }
-
 }
