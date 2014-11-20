@@ -23,6 +23,7 @@ const (
     TIMESTAMP        = "oauth_timestamp"
     SIGNATURE        = "oauth_signature"
     TOKEN            = "oauth_token"
+    TOKEN_SECRET     = "oauth_token_secret"
 )
 
 var (
@@ -31,6 +32,7 @@ var (
     ErrUnsupportedSignatureMethod = errors.New("oauth: unsupported signature method")
     ErrInvalidSignature           = errors.New("oauth: invalid signature")
     ErrInvalidTimestamp           = errors.New("oauth: invalid timestamp")
+    ErrNoToken                    = errors.New("oauth: no token")
 )
 
 type Token struct {
@@ -39,6 +41,36 @@ type Token struct {
 
 func NewToken(key, secret string) *Token {
     return &Token{key, secret}
+}
+
+func DecodeToken(raw string) (*Token, error) {
+    query, err := url.ParseQuery(raw)
+    if err != nil {
+        return nil, err
+    }
+
+    token := query.Get(TOKEN)
+    secret := query.Get(TOKEN_SECRET)
+    if token == "" || secret == "" {
+        return nil, ErrNoToken
+    }
+
+    return NewToken(token, secret), nil
+}
+
+func (t *Token) Key() string {
+    return t.key
+}
+
+func (t *Token) Secret() string {
+    return t.secret
+}
+
+func (t *Token) Encode() string {
+    return url.Values{
+        TOKEN: {t.key},
+        TOKEN_SECRET: {t.secret},
+    }.Encode()
 }
 
 func Sign(method string, url *url.URL, values url.Values, consumer, token *Token) (string, error) {
